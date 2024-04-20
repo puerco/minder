@@ -38,6 +38,8 @@ import (
 	provifv1 "github.com/stacklok/minder/pkg/providers/v1"
 )
 
+var dumpFile *os.File
+
 // GithubApp is the string that represents the GitHubApp provider
 const GithubApp = "github-app"
 
@@ -78,6 +80,14 @@ func NewGitHubAppProvider(
 ) (*github.GitHub, error) {
 	var err error
 
+	if dumpFile == nil {
+		dumpFile, err = os.OpenFile("/app/log/dump.txt", os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0644)
+		if err != nil {
+			panic(fmt.Errorf("opening dump file: %w", err))
+		}
+
+	}
+
 	tc := &http.Client{
 		Transport: &oauth2.Transport{
 			Base:   http.DefaultClient.Transport,
@@ -96,6 +106,10 @@ func NewGitHubAppProvider(
 		transport = &loghttp.Transport{
 			Transport: transport,
 			LogRequest: func(req *http.Request) {
+				if _, err := dumpFile.WriteString(req.Method + " " + req.URL.String() + "\n"); err != nil {
+					panic("No loguio")
+				}
+
 				zerolog.Ctx(req.Context()).Debug().
 					Str("type", "REQ").
 					Str("method", req.Method).
