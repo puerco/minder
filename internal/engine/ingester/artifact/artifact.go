@@ -19,6 +19,7 @@ package artifact
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"sort"
 	"strings"
 	"time"
@@ -53,13 +54,19 @@ type Ingest struct {
 }
 
 type verification struct {
-	IsSigned          bool   `json:"is_signed"`
-	IsVerified        bool   `json:"is_verified"`
-	Repository        string `json:"repository"`
-	Branch            string `json:"branch"`
-	SignerIdentity    string `json:"signer_identity"`
-	RunnerEnvironment string `json:"runner_environment"`
-	CertIssuer        string `json:"cert_issuer"`
+	IsSigned          bool                 `json:"is_signed"`
+	IsVerified        bool                 `json:"is_verified"`
+	Repository        string               `json:"repository"`
+	Branch            string               `json:"branch"`
+	SignerIdentity    string               `json:"signer_identity"`
+	RunnerEnvironment string               `json:"runner_environment"`
+	CertIssuer        string               `json:"cert_issuer"`
+	Attestation       *verifiedAttestation `json:"attestation,omitempty"`
+}
+
+type verifiedAttestation struct {
+	PredicateType string `json:"predicate_type,omitempty"`
+	Predicate     any    `json:"predicate,omitempty"`
 }
 
 // NewArtifactDataIngest creates a new artifact rule data ingest engine
@@ -208,6 +215,13 @@ func (i *Ingest) getVerificationResult(
 				verResult.RunnerEnvironment = res.Signature.Certificate.RunnerEnvironment
 				verResult.CertIssuer = res.Signature.Certificate.Issuer
 			}
+
+			if res.Statement != nil {
+				verResult.Attestation = &verifiedAttestation{
+					PredicateType: res.Statement.PredicateType,
+					Predicate:     res.Statement.Predicate,
+				}
+			}
 			// Append the verification result to the list
 			versionResults = append(versionResults, *verResult)
 		}
@@ -246,7 +260,8 @@ func getAndFilterArtifactVersions(
 	}
 
 	// Fetch all available versions of the artifact
-	upstreamVersions, err := ghCli.GetPackageVersions(ctx, artifact.Owner, artifact.GetTypeLower(), artifact.GetName())
+	artifactName := url.QueryEscape(artifact.GetName())
+	upstreamVersions, err := ghCli.GetPackageVersions(ctx, artifact.Owner, artifact.GetTypeLower(), artifactName)
 	if err != nil {
 		return nil, fmt.Errorf("error retrieving artifact versions: %w", err)
 	}
